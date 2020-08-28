@@ -35,6 +35,7 @@ import { NetworkStatus, isNetworkRequestInFlight } from './networkStatus';
 import {
   ApolloQueryResult,
   OperationVariables,
+  ReobserveQueryCallback,
 } from './types';
 import { LocalState } from './LocalState';
 
@@ -130,6 +131,7 @@ export class QueryManager<TStore> {
     refetchQueries = [],
     awaitRefetchQueries = false,
     update: updateWithProxyFn,
+    reobserveQuery,
     errorPolicy = 'none',
     fetchPolicy,
     context = {},
@@ -213,6 +215,7 @@ export class QueryManager<TStore> {
                 errorPolicy,
                 updateQueries,
                 update: updateWithProxyFn,
+                reobserveQuery,
               });
             } catch (e) {
               error = new ApolloError({
@@ -296,6 +299,7 @@ export class QueryManager<TStore> {
         cache: ApolloCache<TStore>,
         result: FetchResult<TData>,
       ) => void;
+      reobserveQuery?: ReobserveQueryCallback;
     },
     cache = this.cache,
   ) {
@@ -357,8 +361,20 @@ export class QueryManager<TStore> {
             update(c, mutation.result);
           }
         },
+
         // Write the final mutation.result to the root layer of the cache.
         optimistic: false,
+
+        onDirty(watch, diff) {
+          if (mutation.reobserveQuery) {
+            // TODO Get ObservableQuery from watch, somehow.
+            // TODO Call mutation.reobserveQuery with that ObservableQuery.
+            // TODO Store results in an array for the mutation to await.
+
+            // Skip the normal broadcast of this result.
+            return false;
+          }
+        },
       });
     }
   }
