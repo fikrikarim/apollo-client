@@ -5232,12 +5232,14 @@ describe('QueryManager', () => {
         notifyOnNetworkStatusChange: false,
       });
 
+      let finishedRefetch = false;
+
       return observableToPromise(
         { observable },
         result => {
           expect(stripSymbols(result.data)).toEqual(data);
 
-          queryManager.mutate({
+          return queryManager.mutate({
             mutation,
 
             update(cache) {
@@ -5252,8 +5254,15 @@ describe('QueryManager', () => {
 
             reobserveQuery(obsQuery) {
               expect(obsQuery.options.query).toBe(query);
-              return obsQuery.refetch();
+              return obsQuery.refetch().then(async () => {
+                // Wait a bit to make sure the mutation really awaited the
+                // refetching of the query.
+                await new Promise(resolve => setTimeout(resolve, 100));
+                finishedRefetch = true;
+              });
             },
+          }).then(() => {
+            expect(finishedRefetch).toBe(true);
           });
         },
 
@@ -5262,6 +5271,7 @@ describe('QueryManager', () => {
             secondReqData,
           );
           expect(stripSymbols(result.data)).toEqual(secondReqData);
+          expect(finishedRefetch).toBe(true);
         },
       ).then(resolve, reject);
     });
