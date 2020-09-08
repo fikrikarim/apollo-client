@@ -181,23 +181,23 @@ export class QueryManager<TStore> {
 
     return new Promise((resolve, reject) => {
       let storeResult: FetchResult<T> | null;
-      let error: ApolloError;
 
-      self.getObservableFromLink(
-        mutation,
-        {
-          ...context,
-          optimisticResponse,
-        },
-        variables,
-        false,
-      ).subscribe({
-        next(result: FetchResult<T>) {
+      return asyncMap(
+        self.getObservableFromLink(
+          mutation,
+          {
+            ...context,
+            optimisticResponse,
+          },
+          variables,
+          false,
+        ),
+
+        (result: FetchResult<T>) => {
           if (graphQLResultHasError(result) && errorPolicy === 'none') {
-            error = new ApolloError({
+            throw new ApolloError({
               graphQLErrors: result.errors,
             });
-            return;
           }
 
           if (mutationStoreValue) {
@@ -205,9 +205,11 @@ export class QueryManager<TStore> {
             mutationStoreValue.error = null;
           }
 
+          storeResult = result;
+
           if (fetchPolicy !== 'no-cache') {
             try {
-              self.markMutationResult<T>({
+              return self.markMutationResult<T>({
                 mutationId,
                 result,
                 document: mutation,
@@ -218,48 +220,39 @@ export class QueryManager<TStore> {
                 reobserveQuery,
               });
             } catch (e) {
-              error = new ApolloError({
+              throw new ApolloError({
                 networkError: e,
               });
-              return;
             }
           }
-
-          storeResult = result;
         },
 
+      ).subscribe({
         error(err: Error) {
           if (mutationStoreValue) {
             mutationStoreValue.loading = false;
             mutationStoreValue.error = err;
           }
+
           if (optimisticResponse) {
             self.cache.removeOptimistic(mutationId);
           }
+
           self.broadcastQueries();
+
           reject(
-            new ApolloError({
+            err instanceof ApolloError ? err : new ApolloError({
               networkError: err,
             }),
           );
         },
 
         complete() {
-          if (error && mutationStoreValue) {
-            mutationStoreValue.loading = false;
-            mutationStoreValue.error = error;
-          }
-
           if (optimisticResponse) {
             self.cache.removeOptimistic(mutationId);
           }
 
           self.broadcastQueries();
-
-          if (error) {
-            reject(error);
-            return;
-          }
 
           // allow for conditional refetches
           // XXX do we want to make this the only API one day?
@@ -302,7 +295,7 @@ export class QueryManager<TStore> {
       reobserveQuery?: ReobserveQueryCallback;
     },
     cache = this.cache,
-  ) {
+  ): Promise<void> {
     if (shouldWriteResult(mutation.result, mutation.errorPolicy)) {
       const cacheWrites: Cache.WriteOptions[] = [{
         result: mutation.result.data,
@@ -350,7 +343,7 @@ export class QueryManager<TStore> {
         });
       }
 
-      const reobserveResults = [];
+      const reobserveResults: any[] = [];
 
       cache.batch({
         transaction(c) {
@@ -378,7 +371,11 @@ export class QueryManager<TStore> {
           }
         }),
       });
+
+      return Promise.all(reobserveResults).then(() => void 0);
     }
+
+    return Promise.resolve();
   }
 
   public markMutationOptimistic<TData>(
