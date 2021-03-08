@@ -25,6 +25,12 @@ export type QueryStoreValue = Pick<QueryInfo,
   | "graphQLErrors"
   >;
 
+export const enum CacheWriteBehavior {
+  FORBID,
+  OVERWRITE,
+  MERGE,
+};
+
 const destructiveMethodCounts = new (
   canUseWeakMap ? WeakMap : Map
 )<ApolloCache<any>, number>();
@@ -302,7 +308,7 @@ export class QueryInfo {
       | "variables"
       | "fetchPolicy"
       | "errorPolicy">,
-    allowCacheWrite: boolean,
+    cacheWriteBehavior: CacheWriteBehavior,
   ) {
     this.graphQLErrors = isNonEmptyArray(result.errors) ? result.errors : [];
 
@@ -313,7 +319,7 @@ export class QueryInfo {
     if (options.fetchPolicy === 'no-cache') {
       this.diff = { result: result.data, complete: true };
 
-    } else if (!this.stopped && allowCacheWrite) {
+    } else if (!this.stopped && cacheWriteBehavior !== CacheWriteBehavior.FORBID) {
       if (shouldWriteResult(result, options.errorPolicy)) {
         // Using a transaction here so we have a chance to read the result
         // back from the cache before the watch callback fires as a result
@@ -325,6 +331,7 @@ export class QueryInfo {
               query: this.document!,
               data: result.data as T,
               variables: options.variables,
+              overwrite: cacheWriteBehavior === CacheWriteBehavior.OVERWRITE,
             });
 
             this.lastWrite = {
