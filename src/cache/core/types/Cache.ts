@@ -25,9 +25,12 @@ export namespace Cache {
     // declaring the returnPartialData option.
   }
 
-  export interface WatchOptions extends ReadOptions {
+  export interface WatchOptions<
+    Watcher extends object = Record<string, any>
+  > extends ReadOptions {
     immediate?: boolean;
     callback: WatchCallback;
+    watcher?: Watcher;
   }
 
   export interface EvictOptions {
